@@ -65,9 +65,7 @@ services:
             - prod
 
     web:
-        build:
-            context: .
-            dockerfile: dockerfile.prod
+        build: .
         restart: always
         depends_on:
             - postgres
