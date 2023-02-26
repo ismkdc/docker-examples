@@ -1,0 +1,12 @@
+version: '3.9'
+services:
+  frontend:
+    build:
+      dockerfile: dockerfile.prod
+      context: .
+
+    restart: always
+    networks:
+      - prod
+networks:
+  prod:

@@ -1,0 +1,48 @@
+FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build-env
+
+WORKDIR /app
+COPY . .
+
+RUN dotnet restore
+RUN dotnet build -c Release -o /out
+RUN dotnet publish -c Release -o /out
+
+# Runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:7.0
+
+WORKDIR /app
+COPY --from=build-env /out .
+
+# Timezone
+RUN apt update && \
+    apt install -y tzdata ffmpeg
+
+# Install the agent
+RUN apt-get update && apt-get install -y wget ca-certificates gnupg \
+&& echo 'deb http://apt.newrelic.com/debian/ newrelic non-free' | tee /etc/apt/sources.list.d/newrelic.list \
+&& wget https://download.newrelic.com/548C16BF.gpg \
+&& apt-key add 548C16BF.gpg \
+&& apt-get update \
+&& apt-get install -y newrelic-dotnet-agent
+
+# Enable the agent
+ENV CORECLR_ENABLE_PROFILING=1 \
+CORECLR_PROFILER={36032161-FFC0-4B61-B559-F6C5D41BAE5A} \
+CORECLR_NEWRELIC_HOME=/usr/local/newrelic-dotnet-agent \
+CORECLR_PROFILER_PATH=/usr/local/newrelic-dotnet-agent/libNewRelicProfiler.so \
+NEW_RELIC_LICENSE_KEY=keykekykey \
+NEW_RELIC_APP_NAME=myapi
+
+# Env
+ENV TZ=Europe/Istanbul
+ENV LANG tr_TR.UTF-8
+ENV LANGUAGE ${LANG}
+ENV LC_ALL ${LANG}
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+# Full PGO
+ENV DOTNET_TieredPGO 1 
+ENV DOTNET_TC_QuickJitForLoops 1 
+ENV DOTNET_ReadyToRun 0
+
+ENTRYPOINT dotnet myapi.dll

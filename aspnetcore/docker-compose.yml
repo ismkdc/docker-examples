@@ -1,0 +1,100 @@
+version: '3.9'
+services:  
+    postgres:
+        image: postgres:15-alpine
+        command: >
+            postgres
+            -c max_connections=4096
+            -c shared_buffers=8GB
+            -c effective_cache_size=24GB
+            -c maintenance_work_mem=2GB
+            -c checkpoint_completion_target=0.9
+            -c wal_buffers=16MB
+            -c default_statistics_target=100
+            -c random_page_cost=1.1
+            -c effective_io_concurrency=200
+            -c work_mem=20971kB
+            -c min_wal_size=1GB
+            -c max_wal_size=4GB
+        restart: always
+        environment:
+            POSTGRES_PASSWORD: xxx
+            POSTGRES_USER: usr
+            POSTGRES_DB: db
+        volumes:
+            - /var/lib/postgresql/data:/var/lib/postgresql/data:Z
+        networks:
+            - prod
+
+    redis-master:
+        image: 'bitnami/redis:latest'
+        restart: always
+        sysctls:
+            net.core.somaxconn: 65365
+        environment:
+            - REDIS_REPLICATION_MODE=master
+            - REDIS_PASSWORD=xxx
+        networks:
+            - prod
+
+    redis-replica:
+        image: 'bitnami/redis:latest'
+        restart: always
+        sysctls:
+            net.core.somaxconn: 65365
+        depends_on:
+            - redis-master
+        environment:
+            - REDIS_REPLICATION_MODE=slave
+            - REDIS_MASTER_HOST=redis-master
+            - REDIS_MASTER_PORT_NUMBER=6379
+            - REDIS_MASTER_PASSWORD=xxx
+            - REDIS_PASSWORD=xxx
+        networks:
+            - prod
+        scale: 3    
+
+    adminer:
+        image: adminer
+        restart: always
+        ports: 
+            - 0.0.0.0:8282:8080
+        depends_on: 
+            - postgres
+        networks:
+            - prod
+
+    web:
+        build:
+            context: .
+            dockerfile: dockerfile.prod
+        restart: always
+        depends_on:
+            - postgres
+            - redis-master
+            - redis-replica
+        environment:
+            ASPNETCORE_ENVIRONMENT: Prod
+        networks:
+            - prod
+        volumes:
+            - /var/uploads:/uploads
+        scale: 4
+            
+    nginx:
+        image: nginx:alpine
+        restart: always
+        volumes:
+            - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+            - ./nginx/ssl/nginx-selfsigned.crt:/etc/ssl/certs/nginx-selfsigned.crt:ro
+            - ./nginx/ssl/nginx-selfsigned.key:/etc/ssl/private/nginx-selfsigned.key:ro
+        depends_on:
+            - web
+        ports:
+            - 443:443
+            - 443:443/udp
+        networks:
+            - prod
+
+networks:
+    prod:
